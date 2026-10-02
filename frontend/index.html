@@ -1,0 +1,1133 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+
+    <title>Pump-01 Industrial Digital Twin</title>
+
+    <style>
+
+        body {
+            margin: 0;
+            overflow: hidden;
+            font-family: Arial, sans-serif;
+            background: #111;
+        }
+
+        #hmi {
+
+            position: absolute;
+
+            top: 20px;
+            left: 20px;
+
+            background: rgba(0, 0, 0, 0.85);
+
+            color: white;
+
+            padding: 20px;
+
+            border-radius: 10px;
+
+            z-index: 10;
+
+            min-width: 260px;
+        }
+
+        #hmi h1 {
+
+            margin-top: 0;
+
+            font-size: 22px;
+        }
+
+        .value {
+
+            margin: 8px 0;
+
+            font-size: 16px;
+        }
+
+        #status {
+
+            font-weight: bold;
+        }
+
+        #connection {
+
+            margin-top: 15px;
+
+            font-size: 13px;
+        }
+
+        #alarm {
+
+            margin-top: 15px;
+
+            padding: 10px;
+
+            border-radius: 6px;
+
+            background: #333;
+
+            font-weight: bold;
+
+        }
+
+    </style>
+
+</head>
+
+
+<body>
+
+
+    <!-- ===================================== -->
+    <!-- HMI PANEL -->
+    <!-- ===================================== -->
+
+    <div id="hmi">
+
+        <h1>🏭 Pump-01 Digital Twin</h1>
+
+
+        <div class="value">
+
+            Flow:
+
+            <span id="flow">--</span>
+
+            L/min
+
+        </div>
+
+
+        <div class="value">
+
+            Pressure:
+
+            <span id="pressure">--</span>
+
+            bar
+
+        </div>
+
+
+        <div class="value">
+
+            Temperature:
+
+            <span id="temperature">--</span>
+
+            °C
+
+        </div>
+
+
+        <div class="value">
+
+            Current:
+
+            <span id="current">--</span>
+
+            A
+
+        </div>
+
+
+        <div class="value">
+
+            Tank Level:
+
+            <span id="tank_level">--</span>
+
+            %
+
+        </div>
+
+
+        <div class="value">
+
+            Status:
+
+            <span id="status">
+
+                CONNECTING...
+
+            </span>
+
+        </div>
+
+
+        <div id="alarm">
+
+            🟢 SYSTEM NORMAL
+
+        </div>
+
+
+        <div id="connection">
+
+            🔴 WebSocket: Connecting...
+
+        </div>
+
+    </div>
+
+
+
+    <!-- ===================================== -->
+    <!-- THREE.JS -->
+    <!-- ===================================== -->
+
+    <script type="module">
+
+
+        import * as THREE from
+        "https://cdn.jsdelivr.net/npm/three@0.180.0/build/three.module.js";
+
+
+
+        // =====================================
+        // 1. CREATE 3D SCENE
+        // =====================================
+
+        const scene =
+            new THREE.Scene();
+
+
+        scene.background =
+            new THREE.Color(
+                0x111111
+            );
+
+
+
+        // =====================================
+        // 2. CAMERA
+        // =====================================
+
+        const camera =
+            new THREE.PerspectiveCamera(
+                60,
+
+                window.innerWidth /
+                window.innerHeight,
+
+                0.1,
+
+                1000
+            );
+
+
+        camera.position.set(
+            8,
+            6,
+            10
+        );
+
+
+        camera.lookAt(
+            0,
+            2,
+            0
+        );
+
+
+
+        // =====================================
+        // 3. RENDERER
+        // =====================================
+
+        const renderer =
+            new THREE.WebGLRenderer({
+
+                antialias: true
+
+            });
+
+
+        renderer.setSize(
+
+            window.innerWidth,
+
+            window.innerHeight
+
+        );
+
+
+        document.body.appendChild(
+
+            renderer.domElement
+
+        );
+
+
+
+        // =====================================
+        // 4. LIGHTING
+        // =====================================
+
+        const ambientLight =
+            new THREE.AmbientLight(
+
+                0xffffff,
+
+                2
+
+            );
+
+
+        scene.add(
+
+            ambientLight
+
+        );
+
+
+
+        // =====================================
+        // 5. FLOOR
+        // =====================================
+
+        const floorGeometry =
+            new THREE.BoxGeometry(
+
+                14,
+
+                0.2,
+
+                10
+
+            );
+
+
+        const floorMaterial =
+            new THREE.MeshStandardMaterial({
+
+                color: 0x444444
+
+            });
+
+
+        const floor =
+            new THREE.Mesh(
+
+                floorGeometry,
+
+                floorMaterial
+
+            );
+
+
+        floor.position.y =
+            -0.1;
+
+
+        scene.add(
+
+            floor
+
+        );
+
+
+
+        // =====================================
+        // 6. WATER TANK
+        // =====================================
+
+        const tankGeometry =
+            new THREE.CylinderGeometry(
+
+                2,
+
+                2,
+
+                5,
+
+                32
+
+            );
+
+
+        const tankMaterial =
+            new THREE.MeshStandardMaterial({
+
+                color: 0x888888,
+
+                transparent: true,
+
+                opacity: 0.25,
+
+                side: THREE.DoubleSide
+
+            });
+
+
+        const tank =
+            new THREE.Mesh(
+
+                tankGeometry,
+
+                tankMaterial
+
+            );
+
+
+        tank.position.set(
+
+            3,
+
+            2.5,
+
+            0
+
+        );
+
+
+        scene.add(
+
+            tank
+
+        );
+
+
+
+        // =====================================
+        // 7. WATER
+        // =====================================
+
+        const waterGeometry =
+            new THREE.CylinderGeometry(
+
+                1.8,
+
+                1.8,
+
+                1,
+
+                32
+
+            );
+
+
+        const waterMaterial =
+            new THREE.MeshStandardMaterial({
+
+                color: 0x0088ff,
+
+                transparent: true,
+
+                opacity: 0.9
+
+            });
+
+
+        const water =
+            new THREE.Mesh(
+
+                waterGeometry,
+
+                waterMaterial
+
+            );
+
+
+        // Initial level
+
+        const testLevel =
+            68.4;
+
+
+        const waterHeight =
+            5 * (testLevel / 100);
+
+
+        water.scale.y =
+            waterHeight;
+
+
+        water.position.set(
+
+            3,
+
+            waterHeight / 2,
+
+            0
+
+        );
+
+
+        scene.add(
+
+            water
+
+        );
+
+
+
+        // =====================================
+        // 8. PUMP
+        // =====================================
+
+        const pumpGeometry =
+            new THREE.BoxGeometry(
+
+                2,
+
+                1.5,
+
+                2
+
+            );
+
+
+        const pumpMaterial =
+            new THREE.MeshStandardMaterial({
+
+                color: 0x3366ff
+
+            });
+
+
+        const pump =
+            new THREE.Mesh(
+
+                pumpGeometry,
+
+                pumpMaterial
+
+            );
+
+
+        pump.position.set(
+
+            -2,
+
+            0.75,
+
+            0
+
+        );
+
+
+        scene.add(
+
+            pump
+
+        );
+
+
+
+        // =====================================
+        // 9. PIPE
+        // =====================================
+
+        const pipeGeometry =
+            new THREE.CylinderGeometry(
+
+                0.3,
+
+                0.3,
+
+                5,
+
+                16
+
+            );
+
+
+        const pipeMaterial =
+            new THREE.MeshStandardMaterial({
+
+                color: 0x777777
+
+            });
+
+
+        const pipe =
+            new THREE.Mesh(
+
+                pipeGeometry,
+
+                pipeMaterial
+
+            );
+
+
+        pipe.rotation.z =
+            Math.PI / 2;
+
+
+        pipe.position.set(
+
+            0.5,
+
+            0.75,
+
+            0
+
+        );
+
+
+        scene.add(
+
+            pipe
+
+        );
+
+
+
+        // =====================================
+        // 10. MACHINE STATE
+        // =====================================
+
+        let pumpRunning =
+            false;
+
+
+
+        // =====================================
+        // 11. WEBSOCKET CONNECTION
+        // =====================================
+
+        const socket =
+            new WebSocket(
+
+                "ws://127.0.0.1:5000/ws"
+
+            );
+
+
+        socket.onopen =
+            function() {
+
+                console.log(
+
+                    "Connected to Industrial IoT Gateway"
+
+                );
+
+
+                document.getElementById(
+
+                    "connection"
+
+                ).textContent =
+
+                    "🟢 WebSocket: Connected";
+
+            };
+
+
+
+        // =====================================
+        // 12. RECEIVE TELEMETRY
+        // =====================================
+
+        socket.onmessage =
+            function(event) {
+
+
+                console.log(
+
+                    "Telemetry received:",
+
+                    event.data
+
+                );
+
+
+                const data =
+                    JSON.parse(
+
+                        event.data
+
+                    );
+
+
+
+                // =================================
+                // UPDATE HMI
+                // =================================
+
+                document.getElementById(
+
+                    "flow"
+
+                ).textContent =
+
+                    Number(
+
+                        data.flow
+
+                    ).toFixed(1);
+
+
+
+                document.getElementById(
+
+                    "pressure"
+
+                ).textContent =
+
+                    Number(
+
+                        data.pressure
+
+                    ).toFixed(2);
+
+
+
+                document.getElementById(
+
+                    "temperature"
+
+                ).textContent =
+
+                    Number(
+
+                        data.temperature
+
+                    ).toFixed(1);
+
+
+
+                document.getElementById(
+
+                    "current"
+
+                ).textContent =
+
+                    Number(
+
+                        data.current
+
+                    ).toFixed(1);
+
+
+
+                document.getElementById(
+
+                    "tank_level"
+
+                ).textContent =
+
+                    Number(
+
+                        data.tank_level
+
+                    ).toFixed(1);
+
+
+
+                // =================================
+                // WATER LEVEL
+                // =================================
+
+                const level =
+
+                    Number(
+
+                        data.tank_level
+
+                    );
+
+
+                const waterHeight =
+
+                    5 * (level / 100);
+
+
+                water.scale.y =
+
+                    Math.max(
+
+                        waterHeight,
+
+                        0.01
+
+                    );
+
+
+                water.position.y =
+
+                    waterHeight / 2;
+
+
+
+                // =================================
+                // ALARM ANALYSIS
+                // =================================
+
+                let alarms = [];
+
+
+
+                if (
+
+                    Number(data.temperature) > 80
+
+                ) {
+
+                    alarms.push(
+
+                        "HIGH TEMPERATURE"
+
+                    );
+
+                }
+
+
+
+                if (
+
+                    Number(data.current) > 12
+
+                ) {
+
+                    alarms.push(
+
+                        "HIGH CURRENT"
+
+                    );
+
+                }
+
+
+
+                if (
+
+                    Number(data.pressure) < 2
+
+                ) {
+
+                    alarms.push(
+
+                        "LOW PRESSURE"
+
+                    );
+
+                }
+
+
+
+                if (
+
+                    Number(data.tank_level) < 20
+
+                ) {
+
+                    alarms.push(
+
+                        "LOW TANK LEVEL"
+
+                    );
+
+                }
+
+
+
+                // =================================
+                // MACHINE STATE
+                // =================================
+
+                if (
+
+                    data.status === "RUNNING"
+
+                    &&
+
+                    alarms.length === 0
+
+                ) {
+
+                    pumpRunning = true;
+
+
+                    pumpMaterial.color.set(
+
+                        0x3366ff
+
+                    );
+
+
+                    document.getElementById(
+
+                        "status"
+
+                    ).textContent =
+
+                        "RUNNING";
+
+
+
+                    document.getElementById(
+
+                        "alarm"
+
+                    ).textContent =
+
+                        "🟢 SYSTEM NORMAL";
+
+
+
+                    document.getElementById(
+
+                        "alarm"
+
+                    ).style.background =
+
+                        "#064d20";
+
+                }
+
+
+
+                else if (
+
+                    alarms.length > 0
+
+                ) {
+
+                    pumpRunning = true;
+
+
+                    pumpMaterial.color.set(
+
+                        0xff0000
+
+                    );
+
+
+                    document.getElementById(
+
+                        "status"
+
+                    ).textContent =
+
+                        "⚠️ ALARM";
+
+
+
+                    document.getElementById(
+
+                        "alarm"
+
+                    ).textContent =
+
+                        "🔴 " +
+
+                        alarms.join(
+
+                            " | "
+
+                        );
+
+
+
+                    document.getElementById(
+
+                        "alarm"
+
+                    ).style.background =
+
+                        "#660000";
+
+
+
+                    console.warn(
+
+                        "PUMP ALARM:",
+
+                        alarms.join(
+
+                            " | "
+
+                        )
+
+                    );
+
+                }
+
+
+
+                else {
+
+                    pumpRunning = false;
+
+
+                    pumpMaterial.color.set(
+
+                        0x555555
+
+                    );
+
+
+                    document.getElementById(
+
+                        "status"
+
+                    ).textContent =
+
+                        "STOPPED";
+
+
+
+                    document.getElementById(
+
+                        "alarm"
+
+                    ).textContent =
+
+                        "⚪ PUMP STOPPED";
+
+
+
+                    document.getElementById(
+
+                        "alarm"
+
+                    ).style.background =
+
+                        "#333333";
+
+                }
+
+            };
+
+
+
+        // =====================================
+        // 13. WEBSOCKET ERROR
+        // =====================================
+
+        socket.onerror =
+            function(error) {
+
+                console.error(
+
+                    "WebSocket error:",
+
+                    error
+
+                );
+
+
+                document.getElementById(
+
+                    "connection"
+
+                ).textContent =
+
+                    "🔴 WebSocket: Error";
+
+            };
+
+
+
+        // =====================================
+        // 14. WEBSOCKET CLOSED
+        // =====================================
+
+        socket.onclose =
+            function() {
+
+                console.log(
+
+                    "WebSocket connection closed"
+
+                );
+
+
+                document.getElementById(
+
+                    "connection"
+
+                ).textContent =
+
+                    "🔴 WebSocket: Disconnected";
+
+            };
+
+
+
+        // =====================================
+        // 15. ANIMATION
+        // =====================================
+
+        function animate() {
+
+            requestAnimationFrame(
+
+                animate
+
+            );
+
+
+            // Pump rotates only when running
+
+            if (pumpRunning) {
+
+                pump.rotation.y +=
+
+                    0.02;
+
+            }
+
+
+            renderer.render(
+
+                scene,
+
+                camera
+
+            );
+
+        }
+
+
+        animate();
+
+
+
+        // =====================================
+        // 16. RESPONSIVE WINDOW
+        // =====================================
+
+        window.addEventListener(
+
+            "resize",
+
+            () => {
+
+
+                camera.aspect =
+
+                    window.innerWidth /
+
+                    window.innerHeight;
+
+
+                camera.updateProjectionMatrix();
+
+
+                renderer.setSize(
+
+                    window.innerWidth,
+
+                    window.innerHeight
+
+                );
+
+            }
+
+        );
+
+
+    </script>
+
+
+</body>
+
+</html>
